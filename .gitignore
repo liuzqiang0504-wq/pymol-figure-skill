@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 *.pse
 *.png
+!docs/
+!docs/images/
+!docs/images/*.png
 *.jpg
 *.jpeg
 *.tif

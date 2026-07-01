@@ -9,7 +9,11 @@ auto-detect protein-ligand interactions from PDB files with RDKit, render
 close-up interaction panels, generate paired full-protein overview panels, and
 optionally match the visual style of a reference figure supplied by the user.
 
-![1HSG demo figure](docs/images/1hsg-demo.png)
+<a href="docs/images/1hsg-demo.png">
+  <img src="docs/images/1hsg-demo.png" alt="1HSG demo figure showing an interaction close-up and paired macro overview" width="900">
+</a>
+
+Click the image to open the full-resolution demo.
 
 Public demo: PDB `1HSG`. Left: interaction close-up with residue labels and
 dashed contacts. Right: the paired macro overview from the same camera direction,
