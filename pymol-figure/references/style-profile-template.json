@@ -1,0 +1,103 @@
+{
+  "background": "white",
+  "render": {
+    "ray_shadow": "off",
+    "ray_trace_mode": 1,
+    "ray_trace_gain": 0.2,
+    "ambient": 0.5,
+    "antialias": 2
+  },
+  "protein_cartoon_color": "palecyan",
+  "hide_interacting_residue_cartoon": true,
+  "interaction_zoom_buffer": 1.6,
+  "ligand_cba_index": 6,
+  "residue_cba_index": 11,
+  "dash": {
+    "hbond": {
+      "color": "green",
+      "gap": 0.3,
+      "width": 2.5
+    },
+    "pi-pi": {
+      "color": "yellow",
+      "gap": 0.3,
+      "width": 2.5
+    },
+    "metal": {
+      "color": "purple",
+      "gap": 0.3,
+      "width": 2.5
+    },
+    "cation-pi": {
+      "color": "purple",
+      "gap": 0.3,
+      "width": 2.5
+    },
+    "salt-bridge": {
+      "color": "purple",
+      "gap": 0.3,
+      "width": 2.5
+    }
+  },
+  "labels": {
+    "font_paths": [
+      "C:/Windows/Fonts/arial.ttf",
+      "arial.ttf",
+      "Arial.ttf"
+    ],
+    "font_size": 60,
+    "color": [0, 0, 0, 255],
+    "outline_width": 0,
+    "outline_color": [255, 255, 255, 255],
+    "collision_padding": 10,
+    "max_shift_px": 220,
+    "offset_distance": 5.0
+  },
+  "interaction_angles": [
+    [-10, 0, "interaction_1.png"],
+    [-15, 60, "interaction_2.png"],
+    [-10, 120, "interaction_3.png"],
+    [-20, 180, "interaction_4.png"],
+    [ -10, 240, "interaction_5.png"],
+    [60, 0, "interaction_6.png"]
+  ],
+  "macro": {
+    "protein_cartoon_color": "palecyan",
+    "surface_color": "lightblue",
+    "surface_transparency": 0.5,
+    "ambient": 0.7,
+    "ray_trace_gain": 0.08,
+    "two_sided_lighting": 1,
+    "paired_to_interaction": true,
+    "paired_zoom_buffer": 10.0,
+    "auto_angles": true,
+    "keep_angle_previews": false,
+    "preview_size": [600, 450],
+    "candidate_angles": [
+      [-20, 0],
+      [-10, 25],
+      [0, 55],
+      [10, 85],
+      [-15, 120],
+      [5, 150],
+      [15, 185],
+      [-5, 215],
+      [10, 250],
+      [-15, 285],
+      [0, 320],
+      [20, 345],
+      [25, 40],
+      [-25, 140],
+      [25, 220],
+      [-25, 315]
+    ],
+    "angles": [
+      [-5, 0, "macro_1.png"],
+      [10, 60, "macro_2.png"],
+      [-5, 120, "macro_3.png"],
+      [10, 180, "macro_4.png"],
+      [-5, 240, "macro_5.png"],
+      [15, 300, "macro_6.png"]
+    ]
+  }
+}

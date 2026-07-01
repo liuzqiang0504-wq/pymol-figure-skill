@@ -1,0 +1,3 @@
+display_name: PyMOL Figure
+short_description: Render publication-style protein-ligand PyMOL figures.
+default_prompt: Generate PyMOL interaction and macro figures from my structure file.

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pse
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+outputs/
+pymol_figures/
+.DS_Store
+Thumbs.db
+.venv/
+venv/
+env/
