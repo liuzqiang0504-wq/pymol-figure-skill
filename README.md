@@ -24,8 +24,11 @@ zoomed out to show the binding site in the full protein context.
 - Produces both interaction close-ups and macro overview figures in one run.
 - Uses consistent visual rules for colors, lighting, dashed contacts, labels,
   transparent backgrounds, and binding-pocket surfaces.
-- Requires RDKit for higher-fidelity PDB interaction auto-detection instead of
-  relying on fragile geometric guesses.
+- Requires RDKit for higher-fidelity PDB interaction auto-detection, including
+  strengthened ligand auto-selection, heavy-atom hydrogen-bond candidates for
+  PDB files without hydrogens, salt bridges, pi interactions, and hydrophobic or
+  close-contact pocket residues. Close contacts are reported for context but
+  are not drawn by default unless `--include-close-contacts` is used.
 - Supports reference-style rendering when the user provides an example PyMOL
   figure to imitate.
 - Keeps the rendering engine in bundled scripts, so users do not have to build a
@@ -170,7 +173,12 @@ Auto-detect interactions from a PDB:
 py -3.12 .\pymol-figure\scripts\auto_detect_interactions.py complex.pdb --ligand MGP
 ```
 
-Then pass the printed interaction spec into `pymol_render.py`.
+If `--ligand` is omitted, the detector scores non-water, non-ion HETATM
+residues and selects the most ligand-like organic residue. Then pass the printed
+interaction spec into `pymol_render.py`. Use `--max-residues 6` or
+`--max-residues 6` or `--max-residues 8` when a crowded pocket needs fewer
+labels. Add `--include-close-contacts` only when you intentionally want gray
+close-contact dashes for hydrophobic pocket context.
 
 ## Reference-Style Mode Usage
 

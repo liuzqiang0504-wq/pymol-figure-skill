@@ -59,7 +59,7 @@ Examples:
 - `TYR 1719 pi-pi, ASP 189 hbond`
 - `A/PHE/1703 pi-pi, A/ASP/189 hbond` (chain-aware)
 - `ZN 301 metal` (metal coordination)
-- `PHE 1703 cation-pi, ASP 189 salt-bridge`
+- `PHE 1703 cation-pi, ASP 189 salt-bridge, VAL 826 contact`
 
 Supported interaction types:
 - `pi-pi` / `pi-stacking` 鈫?yellow dashed lines between ring centroids
@@ -67,6 +67,8 @@ Supported interaction types:
 - `metal` / `metal-coord` 鈫?purple dashed lines, metal shown as sphere (scale 0.3)
 - `cation-pi` / `cationpi` 鈫?purple dashed lines between cation and ring centroid
 - `salt-bridge` / `saltbridge` 鈫?purple dashed lines between charged groups
+- `contact` / `hydrophobic` / `close-contact` 鈫?gray dashed lines for close
+  heavy-atom pocket contacts
 
 ### Optional Inputs
 
@@ -85,6 +87,12 @@ Supported interaction types:
   first uses the current Python if RDKit is available; if not, it automatically
   tries `PYMOL_FIGURE_RDKIT_PYTHON`, then `py -3.12`. If RDKit is still missing,
   stop instead of using fallback detection.
+- Auto-detection scores non-water, non-ion HETATM residues when `--ligand` is
+  omitted. It reports pi interactions, salt bridges, hydrogen bonds, heavy-atom
+  hydrogen-bond candidates for PDB files without hydrogens, and hydrophobic or
+  close-contact residues. Close contacts are pocket-context candidates and are
+  not included in the render spec unless `--include-close-contacts` is used.
+  Use `--max-residues N` to reduce label crowding.
 - Run `python scripts/check_environment.py` to verify PyMOL, Pillow, and RDKit status.
 
 ---
@@ -369,7 +377,8 @@ cmd.png(filename, dpi=300)
    ```
    py -3.12 "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
    ```
-   This outputs a spec string like `"B/TYR/1719 pi-pi, B/GLN/1707 hbond, ..."`
+   This outputs a spec string like
+   `"B/TYR/1719 pi-pi, B/GLN/1707 hbond, B/VAL/826 contact, ..."`
 3. **Discover PyMOL** 鈥?find and verify PyMOL executable
 4. **Run `pymol_render.py`** with the detected interactions:
    ```

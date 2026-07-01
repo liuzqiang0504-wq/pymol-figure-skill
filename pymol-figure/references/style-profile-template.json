@@ -37,6 +37,11 @@
       "color": "purple",
       "gap": 0.3,
       "width": 2.5
+    },
+    "contact": {
+      "color": "gray",
+      "gap": 0.3,
+      "width": 2.0
     }
   },
   "labels": {

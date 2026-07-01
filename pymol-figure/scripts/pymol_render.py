@@ -80,6 +80,7 @@ HBOND_MIN_ANGLE = 120.0    # D-H...A angle (degrees)
 METAL_CUTOFF = 3.0         # metal-donor distance (A)
 CATION_PI_MAX_DIST = 6.0   # cation-ring centroid distance (A)
 SALT_BRIDGE_MAX_DIST = 4.0 # charged group distance (A)
+CONTACT_MAX_DIST = 4.0     # close heavy-atom contact distance (A)
 POCKET_RADIUS = 5.0        # surface around ligand (A)
 
 # 鈹€鈹€ Metal residues 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -131,6 +132,7 @@ DEFAULT_STYLE = {
         "metal": {"color": "purple", "gap": 0.3, "width": 2.5},
         "cation-pi": {"color": "purple", "gap": 0.3, "width": 2.5},
         "salt-bridge": {"color": "purple", "gap": 0.3, "width": 2.5},
+        "contact": {"color": "gray", "gap": 0.3, "width": 2.0},
     },
     "labels": {
         "font_paths": ["C:/Windows/Fonts/arial.ttf", "arial.ttf", "Arial.ttf"],
@@ -308,9 +310,12 @@ def parse_interactions(spec_string):
             itype = 'cation-pi'
         elif itype_raw in ('salt-bridge', 'saltbridge', 'salt_bridge', 'salt'):
             itype = 'salt-bridge'
+        elif itype_raw in ('contact', 'close-contact', 'close_contact', 'hydrophobic',
+                           'hydrophobic-contact', 'hydrophobic_contact'):
+            itype = 'contact'
         else:
-            print(f"WARNING: unknown interaction type {itype_raw!r}, treating as pi-pi")
-            itype = 'pi-pi'
+            print(f"WARNING: unknown interaction type {itype_raw!r}, treating as contact")
+            itype = 'contact'
 
         # Parse chain-aware format: A/PHE/1703
         if '/' in res_id:
@@ -513,7 +518,7 @@ def setup_interaction_scene(protein_obj, ligand_obj, interactions, output_dir):
 
     # 鈹€鈹€ Delete previous distance objects (IRON RULE 5) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
     for dname in cmd.get_names('objects'):
-        if any(dname.startswith(p) for p in ('pi_', 'hb_', 'metal_', 'catpi_', 'sb_')):
+        if any(dname.startswith(p) for p in ('pi_', 'hb_', 'metal_', 'catpi_', 'sb_', 'contact_')):
             cmd.delete(dname)
 
     # 鈹€鈹€ Interacting residue sticks 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -544,6 +549,8 @@ def setup_interaction_scene(protein_obj, ligand_obj, interactions, output_dir):
             _setup_cation_pi_interaction(protein_obj, ligand_obj, resn, chain, resi, ix)
         elif itype == 'salt-bridge':
             _setup_salt_bridge_interaction(protein_obj, ligand_obj, resn, chain, resi, ix)
+        elif itype == 'contact':
+            _setup_contact_interaction(protein_obj, ligand_obj, resn, chain, resi, ix)
 
     # 鈹€鈹€ Clean up temp selections 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
     cmd.delete('_lig_h_np')
@@ -1057,6 +1064,56 @@ def _setup_hbond_interaction(protein_obj, ligand_obj, resn, chain, resi, ix):
     print(f"  {resn} {resi} H-bond: {hbond_count} contact(s)")
 
 
+def _setup_contact_interaction(protein_obj, ligand_obj, resn, chain, resi, ix):
+    """Create gray dashes for close heavy-atom contacts."""
+    if chain:
+        res_sel = f'{protein_obj} and chain {chain} and resi {resi}'
+    else:
+        res_sel = f'{protein_obj} and resi {resi}'
+
+    prot_sel = f'({res_sel}) and not elem H'
+    lig_sel = f'({ligand_obj}) and not elem H'
+
+    stored.tmp = []
+    cmd.iterate_state(1, prot_sel, 'stored.tmp.append((ID, x, y, z))')
+    prot_atoms = list(stored.tmp)
+    stored.tmp = []
+    cmd.iterate_state(1, lig_sel, 'stored.tmp.append((ID, x, y, z))')
+    lig_atoms = list(stored.tmp)
+    stored.tmp = []
+
+    pairs = []
+    for pid, px, py, pz in prot_atoms:
+        p = [px, py, pz]
+        for lid, lx, ly, lz in lig_atoms:
+            d = distance(p, [lx, ly, lz])
+            if d <= CONTACT_MAX_DIST:
+                pairs.append((d, pid, lid))
+    pairs.sort(key=lambda x: x[0])
+
+    for j, (d, pid, lid) in enumerate(pairs[:4]):
+        dname = f'contact_{ix}_{j}'
+        cmd.distance(dname, f'{protein_obj} and id {pid}', f'{ligand_obj} and id {lid}')
+        _set_dash_style(dname, 'contact')
+        cmd.hide('labels', dname)
+
+    if chain:
+        ca_sel = f'{protein_obj} and chain {chain} and resi {resi} and name CA'
+    else:
+        ca_sel = f'{protein_obj} and resi {resi} and name CA'
+    ca_coords = get_atom_coords(ca_sel)
+    prot_cent = ca_coords[0] if ca_coords else (get_atom_coords(res_sel) or [[0, 0, 0]])[0]
+
+    label_text = f'{resn} {resi}'
+    label_pt = _label_offset(ligand_obj, prot_cent)
+    lbl_name = f'lbl_{ix}'
+    cmd.pseudoatom(lbl_name, pos=label_pt)
+    cmd.label(lbl_name, f'"{label_text}"')
+    cmd.hide('spheres', lbl_name)
+
+    print(f"  {resn} {resi} contact: {min(len(pairs), 4)} close contact(s)")
+
+
 def _setup_metal_interaction(protein_obj, ligand_obj, resn, chain, resi, ix):
     """Create metal coordination dashes + metal sphere display."""
     # Find metal atom in protein
@@ -1443,7 +1500,7 @@ def _cleanup_temporary_objects():
         if any(name.startswith(p) for p in ('cent_', 'lbl_', 'cat_', 'catpi_')):
             cmd.delete(name)
     for name in cmd.get_names('objects'):
-        if any(name.startswith(p) for p in ('pi_', 'hb_', 'metal_', 'catpi_', 'sb_')):
+        if any(name.startswith(p) for p in ('pi_', 'hb_', 'metal_', 'catpi_', 'sb_', 'contact_')):
             cmd.delete(name)
     # Delete leftover selections
     for sel_name in ('_lig_h_np', '_lig_h_p', '_metal_coord', '_sb_contacts',

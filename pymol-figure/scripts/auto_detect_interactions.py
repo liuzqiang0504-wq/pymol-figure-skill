@@ -146,6 +146,22 @@ PROTEIN_ARO_RINGS = {
     "HIS": ["CG", "ND1", "CE1", "NE2", "CD2"],
 }
 
+STANDARD_AA = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS",
+               "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP",
+               "TYR", "VAL"}
+
+WATER_NAMES = {"HOH", "WAT", "H2O", "DOD"}
+
+ION_NAMES = {
+    "NA", "K", "CL", "MG", "CA", "ZN", "MN", "FE", "CO", "NI", "CU", "CD",
+    "HG", "PT", "AU", "AG", "RU", "OS", "PD", "IR", "RH", "BR", "IOD",
+}
+
+BUFFER_OR_SOLVENT_NAMES = {
+    "GOL", "EDO", "PEG", "PG4", "PGE", "MPD", "DMS", "DMSO", "ACT", "ACE",
+    "FMT", "TRS", "MES", "HEP", "SO4", "PO4", "NO3", "BOG",
+}
+
 # Charged sidechain atoms
 CATIONS = {
     "ARG": ["NH1", "NH2", "NE"],
@@ -166,6 +182,29 @@ HYDROPHOBIC_ATOMS = {
     "ILE": ["CG2", "CD1"],
     "PRO": ["CB", "CG", "CD"],
     "MET": ["CE"],
+}
+
+PROTEIN_HBOND_DONORS = {
+    "ARG": ["NH1", "NH2", "NE"],
+    "LYS": ["NZ"],
+    "ASN": ["ND2"],
+    "GLN": ["NE2"],
+    "SER": ["OG"],
+    "THR": ["OG1"],
+    "TYR": ["OH"],
+    "HIS": ["ND1", "NE2"],
+    "TRP": ["NE1"],
+}
+
+PROTEIN_HBOND_ACCEPTORS = {
+    "ASP": ["OD1", "OD2"],
+    "GLU": ["OE1", "OE2"],
+    "ASN": ["OD1"],
+    "GLN": ["OE1"],
+    "SER": ["OG"],
+    "THR": ["OG1"],
+    "TYR": ["OH"],
+    "HIS": ["ND1", "NE2"],
 }
 
 # Common ligand names (HETATM residues that are NOT water/ions/buffer)
@@ -199,6 +238,14 @@ def parse_args(argv=None):
                    help="pi-pi centroid distance cutoff in A (default: 5.5)")
     p.add_argument("--salt-cutoff", type=float, default=4.0,
                    help="Salt bridge distance cutoff in A (default: 4.0)")
+    p.add_argument("--contact-cutoff", type=float, default=4.0,
+                   help="Hydrophobic/close-contact distance cutoff in A (default: 4.0)")
+    p.add_argument("--max-residues", type=int, default=10,
+                   help="Maximum residues in the printed interaction spec (default: 10)")
+    p.add_argument("--include-close-contacts", action="store_true",
+                   help="Include hydrophobic/close contacts in the render spec")
+    p.add_argument("--no-close-contacts", action="store_true",
+                   help="Skip hydrophobic/close-contact reporting")
     return p.parse_args(argv)
 
 
@@ -219,16 +266,31 @@ def classify_atoms(mol):
         if info is None:
             continue
         rname = info.GetResidueName().strip()
-        if rname == "HOH":
+        if rname in WATER_NAMES:
             groups["water"].append(atom.GetIdx())
-        elif rname in ("NA", "K", "CL", "MG", "CA", "ZN", "MN", "FE"):
+        elif rname in ION_NAMES:
             groups["ion"].append(atom.GetIdx())
         else:
             groups[f"res_{rname}"].append(atom.GetIdx())
     return groups
 
 
-def detect_ligand(groups, specified=None):
+def _atom_info(mol, idx):
+    return mol.GetAtomWithIdx(idx).GetPDBResidueInfo()
+
+
+def _is_hetero(mol, idx):
+    info = _atom_info(mol, idx)
+    return bool(info and info.GetIsHeteroAtom())
+
+
+def _residue_key(mol, idx):
+    info = _atom_info(mol, idx)
+    return (info.GetResidueName().strip(), info.GetResidueNumber(),
+            info.GetChainId().strip())
+
+
+def detect_ligand(mol, groups, specified=None):
     """Identify the ligand residue. Uses user-specified name or auto-detects."""
     if specified:
         key = f"res_{specified}"
@@ -238,26 +300,45 @@ def detect_ligand(groups, specified=None):
             print(f"WARNING: specified ligand '{specified}' not found, auto-detecting...",
                   file=sys.stderr)
 
-    # Auto-detect: find HETATM residues that look like ligands
-    candidates = []
+    # Auto-detect by residue instance, not only by residue name. This handles
+    # uncommon ligand residue names and avoids selecting water, ions, and buffers.
+    by_residue = defaultdict(list)
     for key, atoms in groups.items():
-        if key.startswith("res_"):
-            rname = key[4:]
-            if rname in LIGAND_LIKE:
-                candidates.append((rname, atoms))
+        if not key.startswith("res_"):
+            continue
+        for idx in atoms:
+            by_residue[_residue_key(mol, idx)].append(idx)
+
+    candidates = []
+    for (rname, resi, chain), atoms in by_residue.items():
+        if rname in STANDARD_AA or rname in WATER_NAMES or rname in ION_NAMES:
+            continue
+        heavy = [i for i in atoms if mol.GetAtomWithIdx(i).GetAtomicNum() > 1]
+        if len(heavy) < 4:
+            continue
+        if not any(_is_hetero(mol, i) for i in heavy):
+            continue
+
+        carbon_count = sum(1 for i in heavy if mol.GetAtomWithIdx(i).GetAtomicNum() == 6)
+        hetero_count = sum(1 for i in heavy if mol.GetAtomWithIdx(i).GetAtomicNum() in (7, 8, 15, 16))
+        score = len(heavy) * 10 + carbon_count * 3 + hetero_count
+        if rname in LIGAND_LIKE:
+            score += 1000
+        if rname in BUFFER_OR_SOLVENT_NAMES:
+            score -= 500
+        candidates.append((score, rname, resi, chain, atoms))
+
     if candidates:
-        # Pick the largest one
-        candidates.sort(key=lambda x: len(x[1]), reverse=True)
-        return candidates[0][0], candidates[0][1]
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        _, rname, resi, chain, atoms = candidates[0]
+        print(f"Auto-selected ligand candidate: {rname} {chain}{resi}")
+        return rname, atoms
 
     return None, []
 
 
 def detect_protein_chain(mol, groups, ligand_atoms):
     """Auto-detect protein chain ID by finding standard amino acids."""
-    STANDARD_AA = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS",
-                   "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP",
-                   "TYR", "VAL"}
     chains = defaultdict(int)
     for key, atoms in groups.items():
         if not key.startswith("res_"):
@@ -341,15 +422,85 @@ def find_ligand_rings(mol, ligand_atoms, lig_resn, lig_resi, lig_chain):
     return rings
 
 
-def detect_hbonds(mol, protein_atoms, ligand_atoms):
+def _is_polar_heavy(atom):
+    return atom.GetAtomicNum() in (7, 8, 16)
+
+
+def _protein_donor_acceptor_names(resn):
+    donors = set(PROTEIN_HBOND_DONORS.get(resn, []))
+    acceptors = set(PROTEIN_HBOND_ACCEPTORS.get(resn, []))
+    donors.add("N")
+    acceptors.add("O")
+    return donors, acceptors
+
+
+def _ligand_is_acceptor(atom):
+    if atom.GetAtomicNum() not in (7, 8, 16):
+        return False
+    return atom.GetFormalCharge() <= 0
+
+
+def _ligand_is_donor(atom, explicit_hydrogens):
+    if atom.GetAtomicNum() not in (7, 8, 16):
+        return False
+    if explicit_hydrogens:
+        return any(n.GetAtomicNum() == 1 for n in atom.GetNeighbors())
+    return atom.GetFormalCharge() >= 0
+
+
+def detect_hbonds(mol, protein_atoms, ligand_atoms, cutoff=3.5):
     """Detect H-bonds: protein donor/acceptor <-> ligand donor/acceptor.
-    Uses explicit H positions from PDB for angle validation."""
+    Uses explicit H positions when present. If the PDB lacks hydrogens, falls
+    back to donor/acceptor heavy-atom contacts so common PDB files still return
+    useful binding-site residues."""
     hbonds = []
     conf = mol.GetConformer()
+    explicit_hydrogens = any(mol.GetAtomWithIdx(i).GetAtomicNum() == 1
+                             for i in protein_atoms + ligand_atoms)
 
     def _pos(idx):
         p = conf.GetAtomPosition(idx)
         return Point3D(p.x, p.y, p.z)
+
+    def _add_heavy_atom_candidates():
+        best_by_residue = {}
+        for pa_idx in protein_atoms:
+            pa = mol.GetAtomWithIdx(pa_idx)
+            if not _is_polar_heavy(pa):
+                continue
+            pinfo = pa.GetPDBResidueInfo()
+            if not pinfo:
+                continue
+            resn = pinfo.GetResidueName().strip()
+            aname = pinfo.GetName().strip()
+            donors, acceptors = _protein_donor_acceptor_names(resn)
+            p_is_donor = aname in donors
+            p_is_acceptor = aname in acceptors
+            if not (p_is_donor or p_is_acceptor):
+                continue
+            for la_idx in ligand_atoms:
+                la = mol.GetAtomWithIdx(la_idx)
+                if not _is_polar_heavy(la):
+                    continue
+                compatible = (
+                    (p_is_donor and _ligand_is_acceptor(la)) or
+                    (p_is_acceptor and _ligand_is_donor(la, explicit_hydrogens))
+                )
+                if not compatible:
+                    continue
+                d = distance(atom_pos(mol, pa_idx), atom_pos(mol, la_idx))
+                if d > cutoff:
+                    continue
+                key = (resn, pinfo.GetResidueNumber(), pinfo.GetChainId().strip())
+                prev = best_by_residue.get(key)
+                if prev is None or d < prev:
+                    best_by_residue[key] = d
+        for (resn, resi, chain), d in best_by_residue.items():
+            hbonds.append((f"{resn}{resi}", resn, resi, chain, d, 0.0))
+
+    if not explicit_hydrogens:
+        _add_heavy_atom_candidates()
+        return hbonds
 
     for la_idx in ligand_atoms:
         la = mol.GetAtomWithIdx(la_idx)
@@ -416,6 +567,32 @@ def detect_hbonds(mol, protein_atoms, ligand_atoms):
     return hbonds
 
 
+def detect_hydrophobic_contacts(res_groups, mol, ligand_atoms, cutoff=4.0):
+    """Detect hydrophobic or close heavy-atom contacts for pocket context."""
+    ligand_contact_atoms = [
+        i for i in ligand_atoms
+        if mol.GetAtomWithIdx(i).GetAtomicNum() in (6, 16, 17, 35, 53)
+    ]
+    contacts = []
+    for (resn, resi, chain), atom_list in res_groups.items():
+        atom_map = get_atom_map(mol, atom_list)
+        candidate_names = HYDROPHOBIC_ATOMS.get(resn, [])
+        if not candidate_names:
+            continue
+        best = None
+        for aname in candidate_names:
+            if aname not in atom_map:
+                continue
+            pidx = atom_map[aname]
+            for la_idx in ligand_contact_atoms:
+                d = distance(atom_pos(mol, pidx), atom_pos(mol, la_idx))
+                if d <= cutoff and (best is None or d < best):
+                    best = d
+        if best is not None:
+            contacts.append((f"{resn}{resi}", resn, resi, chain, best))
+    return contacts
+
+
 def detect_pipi(protein_rings, ligand_rings, cutoff=5.5):
     """Detect pi-pi stacking by ring centroid distances."""
     pipi = []
@@ -474,12 +651,14 @@ def detect_salt_bridges(res_groups, mol, ligand_atoms, cutoff=4.0):
     return bridges
 
 
-def format_interaction_spec(hbonds, pipi_results, salt_bridges, chain):
+def format_interaction_spec(hbonds, pipi_results, salt_bridges, contacts, chain,
+                            max_residues=10):
     """Format detected interactions into the spec string for pymol_render.py."""
     # Track unique residues by interaction type
     hbond_res = set()
     pipi_res = set()
     salt_res = set()
+    contact_res = set()
 
     for pres, resn, resi, pchain, d, ang in hbonds:
         hbond_res.add((resn, resi, pchain))
@@ -490,22 +669,36 @@ def format_interaction_spec(hbonds, pipi_results, salt_bridges, chain):
     for label, resn, resi, bchain, aname, lname, d, desc in salt_bridges:
         salt_res.add((resn, resi, bchain))
 
-    # Build spec: pi-pi first (most important), then hbond, then salt bridges
+    for label, resn, resi, cchain, d in contacts:
+        contact_res.add((resn, resi, cchain))
+
+    # Build spec: strongest interactions first, then close contacts for context.
     specs = []
+    used = set()
+
+    def _append(resn, resi, pchain, itype):
+        if len(specs) >= max_residues:
+            return
+        key = (resn, resi, pchain)
+        if key in used:
+            return
+        used.add(key)
+        specs.append(f"{pchain}/{resn}/{resi} {itype}")
 
     # pi-pi: use chain-aware format
     for resn, resi, pchain in sorted(pipi_res, key=lambda x: x[1]):
-        specs.append(f"{pchain}/{resn}/{resi} pi-pi")
+        _append(resn, resi, pchain, "pi-pi")
 
     # hbond: exclude residues already listed as pi-pi
     for resn, resi, pchain in sorted(hbond_res, key=lambda x: x[1]):
-        if (resn, resi, pchain) not in pipi_res:
-            specs.append(f"{pchain}/{resn}/{resi} hbond")
+        _append(resn, resi, pchain, "hbond")
 
     # salt bridges
     for resn, resi, bchain in sorted(salt_res, key=lambda x: x[1]):
-        if (resn, resi, bchain) not in pipi_res and (resn, resi, bchain) not in hbond_res:
-            specs.append(f"{bchain}/{resn}/{resi} salt-bridge")
+        _append(resn, resi, bchain, "salt-bridge")
+
+    for resn, resi, cchain in sorted(contact_res, key=lambda x: x[1]):
+        _append(resn, resi, cchain, "contact")
 
     return ", ".join(specs)
 
@@ -524,7 +717,7 @@ def main(argv=None):
           f"{len([k for k in groups if k.startswith('res_')])} residue types")
 
     # Detect ligand
-    lig_name, lig_atoms = detect_ligand(groups, args.ligand)
+    lig_name, lig_atoms = detect_ligand(mol, groups, args.ligand)
     if not lig_atoms:
         print("ERROR: no ligand found. Specify with --ligand RESNAME", file=sys.stderr)
         sys.exit(1)
@@ -559,9 +752,7 @@ def main(argv=None):
                      if mol.GetAtomWithIdx(i).GetPDBResidueInfo().GetChainId().strip()
                      not in lig_chain_atoms
                      or mol.GetAtomWithIdx(i).GetPDBResidueInfo().GetResidueName().strip()
-                     in ("ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS",
-                         "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP",
-                         "TYR", "VAL")]
+                     in STANDARD_AA]
 
     print(f"Protein atoms: {len(protein_atoms)}")
 
@@ -572,13 +763,16 @@ def main(argv=None):
     print("\n--- Detecting interactions ---")
 
     # H-bonds
-    hbonds = detect_hbonds(mol, protein_atoms, lig_atoms)
+    hbonds = detect_hbonds(mol, protein_atoms, lig_atoms, args.hbond_cutoff)
     print(f"\nH-bonds found: {len(hbonds)}")
     seen = set()
     for pres, resn, resi, pchain, d, ang in sorted(hbonds, key=lambda x: x[4]):
         key = (pres, pchain)
         if key not in seen:
-            print(f"  {pchain}/{resn}/{resi}  d={d:.1f}A  angle={ang:.0f}deg")
+            if ang:
+                print(f"  {pchain}/{resn}/{resi}  d={d:.1f}A  angle={ang:.0f}deg")
+            else:
+                print(f"  {pchain}/{resn}/{resi}  d={d:.1f}A  heavy-atom candidate")
             seen.add(key)
 
     # pi-pi
@@ -597,8 +791,24 @@ def main(argv=None):
     for s in salt:
         print(f"  {s[4]}:{s[0]} <-> {s[5]}  d={s[6]:.1f}A  ({s[7]})")
 
+    if args.no_close_contacts:
+        contacts = []
+    else:
+        contacts = detect_hydrophobic_contacts(
+            res_groups, mol, lig_atoms, args.contact_cutoff)
+    print(f"\nHydrophobic/close contacts: {len(contacts)}")
+    for label, resn, resi, cchain, d in sorted(contacts, key=lambda x: x[4]):
+        print(f"  {cchain}/{resn}/{resi}  d={d:.1f}A")
+
     # Format output
-    spec = format_interaction_spec(hbonds, pipi, salt, chain)
+    contacts_for_spec = contacts if args.include_close_contacts else []
+    if contacts and not args.include_close_contacts:
+        print("  Note: close contacts are reported for pocket context but are not "
+              "included in the render spec by default.")
+        print("  Add --include-close-contacts to draw them as gray contact dashes.")
+
+    spec = format_interaction_spec(
+        hbonds, pipi, salt, contacts_for_spec, chain, args.max_residues)
     print(f"\n=== Interaction spec ===")
     print(spec)
     print()
