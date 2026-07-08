@@ -29,7 +29,7 @@ standards.
      the structure allows.
 - **Auto mode**: When the user provides a PDB file without an interaction list, FIRST run
   `auto_detect_interactions.py` to detect interactions, THEN render
-- **Speed**: Use the bundled `pymol_render.py` 鈥?do NOT write a new PyMOL script
+- **Speed**: Use the bundled `pymol_render.py`; do NOT write a new PyMOL script
 - **Don't ask**: Color choices, transparency, ray-trace settings, label sizes, DPI
   (all are standardized below). Only ask about missing inputs.
 - **DO ask**: File path (if not provided), PyMOL path (if auto-discovery fails)
@@ -75,12 +75,12 @@ Examples:
 - `PHE 1703 cation-pi, ASP 189 salt-bridge, VAL 826 contact`
 
 Supported interaction types:
-- `pi-pi` / `pi-stacking` 鈫?yellow dashed lines between ring centroids
-- `hbond` / `h-bond` 鈫?green dashed lines between donor/acceptor
-- `metal` / `metal-coord` 鈫?purple dashed lines, metal shown as sphere (scale 0.3)
-- `cation-pi` / `cationpi` 鈫?purple dashed lines between cation and ring centroid
-- `salt-bridge` / `saltbridge` 鈫?purple dashed lines between charged groups
-- `contact` / `hydrophobic` / `close-contact` 鈫?gray dashed lines for close
+- `pi-pi` / `pi-stacking`: yellow dashed lines between ring centroids
+- `hbond` / `h-bond`: green dashed lines between donor/acceptor
+- `metal` / `metal-coord`: purple dashed lines, metal shown as sphere (scale 0.3)
+- `cation-pi` / `cationpi`: purple dashed lines between cation and ring centroid
+- `salt-bridge` / `saltbridge`: purple dashed lines between charged groups
+- `contact` / `hydrophobic` / `close-contact`: gray dashed lines for close
   heavy-atom pocket contacts
 
 ### Optional Inputs
@@ -162,7 +162,7 @@ For transparent PNG output, set `background` to `"transparent"`, `"none"`, or
 
 ## Two Figure Types
 
-### 1. 浣滅敤鍥?(Interaction Figure)
+### 1. Interaction Figure
 
 Close-up of the binding site showing molecular interactions.
 
@@ -171,21 +171,21 @@ Close-up of the binding site showing molecular interactions.
 | Protein | palecyan cartoon (interacting residue cartoon hidden in close-up) |
 | Interacting residues | sticks only, by-element coloring via `util.cba(11)`, non-polar H hidden |
 | Ligand | sticks, by-element coloring via `util.cba(6)`, non-polar H hidden, polar H white |
-| 蟺-蟺 stacking | yellow dashed lines between ring centroids, yellow centroid spheres (scale 0.32) |
+| pi-pi stacking | yellow dashed lines between ring centroids, yellow centroid spheres (scale 0.32) |
 | H-bond | green dashed lines |
-| Residue labels | PIL-composited black Arial text, 60pt, always on top, positioned 5 脜 outward from residue centroid in direction away from ligand |
+| Residue labels | PIL-composited black Arial text, 60pt, always on top, positioned 5 A outward from residue centroid in direction away from ligand |
 | Distance labels | hidden |
 | Angles | **6 views** (every 60 degrees azimuth + top-down), zoomed to ligand + interacting residues with `interaction_zoom_buffer` default 1.6 A |
 | Output | `interaction_1.png` through `interaction_6.png` |
 
-### 2. 瀹忚鍥?(Macro Overview Figure)
+### 2. Macro Overview Figure
 
 Full protein view showing where the ligand binds.
 
 | Element | Specification |
 |---------|--------------|
 | Protein | palecyan cartoon (entire protein) |
-| Binding pocket | lightblue surface, 40% transparency (residues within 5脜 of ligand) |
+| Binding pocket | lightblue surface, 40% transparency (residues within 5 A of ligand) |
 | Ligand | sticks, by-element coloring via `util.cba(6)`, non-polar H hidden, polar H white |
 | Residue sticks | **NONE** |
 | Labels | **NONE** |
@@ -241,7 +241,7 @@ cmd.show('sticks', 'ligand')  # ligand
 # ... all other show() calls
 ```
 
-### IRON RULE 3: Labels are PIL-composited 鈥?NOT PyMOL labels
+### IRON RULE 3: Labels are PIL-composited, not PyMOL labels
 
 Residue labels are rendered using PIL (Pillow) after ray tracing, NOT as PyMOL labels.
 This guarantees they are always on top, never occluded by protein geometry.
@@ -286,7 +286,7 @@ cmd.set('depth_cue', 0)
 ```python
 # Font: Arial 60pt, black, no outline
 # Position: calculated per-residue, radiating outward from ligand centroid
-# Offset distance: 5.0 脜 from residue centroid
+# Offset distance: 5.0 A from residue centroid
 # Collision handling: small 2D shifts only, keeping each label near its residue
 # Never occluded: drawn on top of the rendered PNG via PIL
 ```
@@ -295,17 +295,17 @@ cmd.set('depth_cue', 0)
 
 `cmd.hide('everything')` strips ALL representations. Every single thing you want visible must have its own `cmd.show()` call BEFORE any coloring:
 
-- `cmd.show('sticks', ligand_obj)` 鈫?**before** `util.cba()`, otherwise ligand is invisible
-- `cmd.show('spheres', metal_sel)` 鈫?in **both** interaction and macro scenes
-- `cmd.show('cartoon', protein_obj)` 鈫?protein backbone
-- `cmd.show('surface', pocket_sel)` 鈫?binding pocket (macro only)
+- `cmd.show('sticks', ligand_obj)`: **before** `util.cba()`, otherwise ligand is invisible
+- `cmd.show('spheres', metal_sel)`: in **both** interaction and macro scenes
+- `cmd.show('cartoon', protein_obj)`: protein backbone
+- `cmd.show('surface', pocket_sel)`: binding pocket (macro only)
 
 Common symptom: "the ligand disappeared" or "metal ions are gone in the macro figure."
 
 ### IRON RULE 9: Hide centroid pseudoatoms after creating dashed lines
 
-蟺-蟺 and cation-pi interactions create `cmd.pseudoatom()` ring centroids to draw dashed
-lines between. After `cmd.distance()`, hide the centroids 鈥?the distance object is
+Pi-pi and cation-pi interactions create `cmd.pseudoatom()` ring centroids to draw dashed
+lines between. After `cmd.distance()`, hide the centroids; the distance object is
 independent and the spheres/wire markers look unprofessional.
 
 ```python
@@ -386,33 +386,33 @@ cmd.png(filename, dpi=300)
 
 ### Standard Mode (user provides interactions)
 
-1. **Validate inputs** 鈥?file exists? interaction list provided? If not 鈫?ask
-2. **Discover PyMOL** 鈥?find and verify PyMOL executable using tiered discovery
+1. **Validate inputs**: file exists? interaction list provided? If not, ask
+2. **Discover PyMOL**: find and verify PyMOL executable using tiered discovery
 3. **Run `pymol_render.py`**:
    ```
    <PYMOL_PATH> "SKILL_DIR/scripts/pymol_render.py" --input <FILE> --interactions "<SPEC>" --output <DIR>
    ```
-4. **Verify output** 鈥?check all 13 files exist (interaction_1..6.png, macro_1..6.png, session.pse) and are non-trivial size (> 100 KB)
-5. **Report** 鈥?list file paths and sizes to user
+4. **Verify output**: check all 13 files exist (interaction_1..6.png, macro_1..6.png, session.pse) and are non-trivial size (> 100 KB)
+5. **Report**: list file paths and sizes to user
 
 ### Auto-Detection Mode (user provides only a PDB file)
 
-1. **Validate inputs** 鈥?file exists?
+1. **Validate inputs**: file exists?
 2. **Run auto-detection**:
    ```
    & $env:PYMOL_FIGURE_RDKIT_PYTHON "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
    ```
    This outputs a spec string like
    `"B/TYR/1719 pi-pi, B/GLN/1707 hbond, B/VAL/826 contact, ..."`
-3. **Discover PyMOL** 鈥?find and verify PyMOL executable
+3. **Discover PyMOL**: find and verify PyMOL executable
 4. **Run `pymol_render.py`** with the detected interactions:
    ```
    <PYMOL_PATH> "SKILL_DIR/scripts/pymol_render.py" --input <FILE> --interactions "<DETECTED_SPEC>" --output <DIR>
    ```
-5. **Verify output** 鈥?check all 13 files
-6. **Report** 鈥?list detected interactions and output paths
+5. **Verify output**: check all 13 files
+6. **Report**: list detected interactions and output paths
 
-**Important**: Always use the bundled `scripts/pymol_render.py`. Do NOT write a new PyMOL script from scratch 鈥?the bundled script has been tested and follows all IRON RULES.
+**Important**: Always use the bundled `scripts/pymol_render.py`. Do NOT write a new PyMOL script from scratch; the bundled script has been tested and follows all IRON RULES.
 
 ---
 
@@ -421,12 +421,12 @@ cmd.png(filename, dpi=300)
 | Element | Color Specification |
 |---------|-------------------|
 | Protein cartoon | `cmd.color_deep('palecyan', obj, 0)` |
-| Ligand sticks | `util.cba(6, obj, _self=cmd)` 鈥?element-based, green carbon |
-| Interacting residues | `util.cba(11, obj, _self=cmd)` 鈥?element-based, alternative carbon; non-polar H hidden |
+| Ligand sticks | `util.cba(6, obj, _self=cmd)`; element-based, green carbon |
+| Interacting residues | `util.cba(11, obj, _self=cmd)`; element-based, alternative carbon; non-polar H hidden |
 | Binding pocket surface | lightblue, 40% transparent |
-| 蟺-蟺 dashes | yellow, 0.3 gap, 2.5 width |
+| pi-pi dashes | yellow, 0.3 gap, 2.5 width |
 | H-bond dashes | green, 0.3 gap, 2.5 width |
-| Metal/salt/cation-蟺 dashes | purple, 0.3 gap, 2.5 width |
+| Metal/salt/cation-pi dashes | purple, 0.3 gap, 2.5 width |
 | Polar hydrogens | white sticks |
 | Non-polar hydrogens | hidden |
 | Residue labels | Black Arial text (PIL), 60pt, no outline |
@@ -438,9 +438,9 @@ cmd.png(filename, dpi=300)
 
 | File | Open when |
 |------|-----------|
-| `scripts/pymol_render.py` | Main rendering engine 鈥?always used |
+| `scripts/pymol_render.py` | Main rendering engine; always used |
 | `scripts/auto_detect_interactions.py` | User provides PDB without interaction list |
-| `scripts/ring_detection.py` | Ligand ring detection for 蟺-蟺 stacking |
+| `scripts/ring_detection.py` | Ligand ring detection for pi-pi stacking |
 | `references/color-standards.md` | Writing any PyMOL color/show/hide/set commands |
 | `references/interaction-types.md` | Determining ring atoms, distance cutoffs, interaction geometry |
 | `references/pymol-pitfalls.md` | Something renders wrong, color doesn't apply, or command fails silently |

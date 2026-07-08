@@ -96,6 +96,9 @@ Required:
 - A structural file (`.pdb`, `.maegz`, `.mol2`, or `.cif`).
 - RDKit for automatic interaction detection from PDB files.
 
+RDKit is optional for manual rendering, but required for automatic
+protein-ligand interaction detection.
+
 Recommended:
 
 - Pillow, for high-quality Arial label compositing.
@@ -104,7 +107,8 @@ Recommended:
 
 RDKit is required only for **automatic interaction detection**. If a new user
 does not have RDKit installed, the skill can still render figures when the user
-provides a manual interaction list, for example:
+provides a manual interaction list. In that mode, PyMOL renders the figure and
+RDKit is not used. For example:
 
 ```powershell
 D:\PyMOL\python.exe .\pymol-figure\scripts\pymol_render.py `
@@ -155,7 +159,12 @@ Restart Codex so the skill can be discovered.
 Before rendering anything, every user should verify PyMOL and RDKit:
 
 ```powershell
-python .\pymol-figure\scripts\check_environment.py
+$rdkitPython = [Environment]::GetEnvironmentVariable("PYMOL_FIGURE_RDKIT_PYTHON", "User")
+if ($rdkitPython) {
+  & $rdkitPython .\pymol-figure\scripts\check_environment.py
+} else {
+  py -3.12 .\pymol-figure\scripts\check_environment.py
+}
 ```
 
 The deployment is ready only when the check reports:
@@ -168,7 +177,12 @@ The deployment is ready only when the check reports:
 If PyMOL is installed in a custom location:
 
 ```powershell
-python .\pymol-figure\scripts\check_environment.py --pymol "D:\PyMOL\python.exe"
+$rdkitPython = [Environment]::GetEnvironmentVariable("PYMOL_FIGURE_RDKIT_PYTHON", "User")
+if ($rdkitPython) {
+  & $rdkitPython .\pymol-figure\scripts\check_environment.py --pymol "D:\PyMOL\python.exe"
+} else {
+  py -3.12 .\pymol-figure\scripts\check_environment.py --pymol "D:\PyMOL\python.exe"
+}
 ```
 
 If RDKit is installed in a separate Python, set:
@@ -182,6 +196,13 @@ If RDKit is installed in a separate Python, set:
 ```
 
 Then restart Codex or the terminal and run the environment check again.
+
+If `PYMOL_FIGURE_RDKIT_PYTHON` is not set yet, run the check with the Python
+where RDKit is installed, for example:
+
+```powershell
+py -3.12 .\pymol-figure\scripts\check_environment.py --pymol "D:\PyMOL\python.exe"
+```
 
 ## Optional Environment Tips
 
@@ -206,7 +227,12 @@ D:\PyMOL\python.exe .\pymol-figure\scripts\pymol_render.py `
 Auto-detect interactions from a PDB:
 
 ```powershell
-py -3.12 .\pymol-figure\scripts\auto_detect_interactions.py complex.pdb --ligand MGP
+$rdkitPython = [Environment]::GetEnvironmentVariable("PYMOL_FIGURE_RDKIT_PYTHON", "User")
+if ($rdkitPython) {
+  & $rdkitPython .\pymol-figure\scripts\auto_detect_interactions.py complex.pdb --ligand MGP
+} else {
+  py -3.12 .\pymol-figure\scripts\auto_detect_interactions.py complex.pdb --ligand MGP
+}
 ```
 
 If `--ligand` is omitted, the detector scores non-water, non-ion HETATM
