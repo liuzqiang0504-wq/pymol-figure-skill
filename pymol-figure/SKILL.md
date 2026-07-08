@@ -110,6 +110,11 @@ Supported interaction types:
   close-contact residues. Close contacts are pocket-context candidates and are
   not included in the render spec unless `--include-close-contacts` is used.
   Use `--max-residues N` to reduce label crowding.
+- Auto-detection must not treat protein-like HETATM residues or crystallization
+  additives as the main ligand. Common modified amino acids such as MSE, SEP,
+  TPO, and PTR, plus water, ions, and common buffer/solvent residues, are
+  excluded from automatic ligand selection. If the user intentionally wants one
+  of those residues, ask for or use an explicit `--ligand RESNAME`.
 - Run `python scripts/check_environment.py` to verify PyMOL, Pillow, and RDKit status.
   On Windows, if `PYMOL_FIGURE_RDKIT_PYTHON` is set, use that Python for the
   environment check so the reported RDKit status matches auto-detection:

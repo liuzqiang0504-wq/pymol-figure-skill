@@ -30,6 +30,9 @@ zoomed out to show the binding site in the full protein context.
   PDB files without hydrogens, salt bridges, pi interactions, and hydrophobic or
   close-contact pocket residues. Close contacts are reported for context but
   are not drawn by default unless `--include-close-contacts` is used.
+- Avoids treating common modified amino acids such as MSE/SEP/TPO/PTR, water,
+  ions, and crystallization buffers as the main ligand during automatic ligand
+  selection.
 - Supports reference-style rendering when the user provides an example PyMOL
   figure to imitate.
 - Keeps the rendering engine in bundled scripts, so users do not have to build a
@@ -207,11 +210,14 @@ py -3.12 .\pymol-figure\scripts\auto_detect_interactions.py complex.pdb --ligand
 ```
 
 If `--ligand` is omitted, the detector scores non-water, non-ion HETATM
-residues and selects the most ligand-like organic residue. Then pass the printed
-interaction spec into `pymol_render.py`. Use `--max-residues 6` or
-`--max-residues 8` when a crowded pocket needs fewer labels. Add
-`--include-close-contacts` only when you intentionally want gray close-contact
-dashes for hydrophobic pocket context.
+residues and selects the most ligand-like organic residue. Modified amino acids
+such as MSE/SEP/TPO/PTR and common crystallization additives are skipped so that
+apo structures or structures with only buffer molecules do not produce a
+misleading ligand. If the true ligand is an unusual solvent/additive residue,
+specify it explicitly with `--ligand`. Then pass the printed interaction spec
+into `pymol_render.py`. Use `--max-residues 6` or `--max-residues 8` when a
+crowded pocket needs fewer labels. Add `--include-close-contacts` only when you
+intentionally want gray close-contact dashes for hydrophobic pocket context.
 
 ## Reference-Style Mode Usage
 

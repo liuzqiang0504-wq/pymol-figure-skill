@@ -150,6 +150,16 @@ STANDARD_AA = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS",
                "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP",
                "TYR", "VAL"}
 
+MODIFIED_AA = {
+    # Common protein residues that often appear as HETATM records in PDB files.
+    # They should not be auto-selected as the ligand in apo or peptide structures.
+    "MSE", "SEC", "PYL", "SEP", "TPO", "PTR", "HYP", "CSO", "CSD", "CSE",
+    "CME", "CYM", "CYX", "MLY", "M3L", "KCX", "LLP", "PCA", "HIC", "HID",
+    "HIE", "HIP", "ASH", "GLH", "OCS", "FME",
+}
+
+PROTEIN_LIKE_AA = STANDARD_AA | MODIFIED_AA
+
 WATER_NAMES = {"HOH", "WAT", "H2O", "DOD"}
 
 ION_NAMES = {
@@ -311,7 +321,9 @@ def detect_ligand(mol, groups, specified=None):
 
     candidates = []
     for (rname, resi, chain), atoms in by_residue.items():
-        if rname in STANDARD_AA or rname in WATER_NAMES or rname in ION_NAMES:
+        if rname in PROTEIN_LIKE_AA or rname in WATER_NAMES or rname in ION_NAMES:
+            continue
+        if rname in BUFFER_OR_SOLVENT_NAMES:
             continue
         heavy = [i for i in atoms if mol.GetAtomWithIdx(i).GetAtomicNum() > 1]
         if len(heavy) < 4:
@@ -324,8 +336,6 @@ def detect_ligand(mol, groups, specified=None):
         score = len(heavy) * 10 + carbon_count * 3 + hetero_count
         if rname in LIGAND_LIKE:
             score += 1000
-        if rname in BUFFER_OR_SOLVENT_NAMES:
-            score -= 500
         candidates.append((score, rname, resi, chain, atoms))
 
     if candidates:
@@ -344,7 +354,7 @@ def detect_protein_chain(mol, groups, ligand_atoms):
         if not key.startswith("res_"):
             continue
         rname = key[4:]
-        if rname not in STANDARD_AA:
+        if rname not in PROTEIN_LIKE_AA:
             continue
         for idx in atoms:
             info = mol.GetAtomWithIdx(idx).GetPDBResidueInfo()
@@ -752,7 +762,7 @@ def main(argv=None):
                      if mol.GetAtomWithIdx(i).GetPDBResidueInfo().GetChainId().strip()
                      not in lig_chain_atoms
                      or mol.GetAtomWithIdx(i).GetPDBResidueInfo().GetResidueName().strip()
-                     in STANDARD_AA]
+                     in PROTEIN_LIKE_AA]
 
     print(f"Protein atoms: {len(protein_atoms)}")
 
