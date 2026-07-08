@@ -3,11 +3,12 @@
 Turn protein-ligand structures into publication-style PyMOL figures with one
 Codex skill.
 
-`pymol-figure` is designed for researchers who repeatedly need clean molecular
-graphics but do not want to rewrite PyMOL scripts for every complex. It can
-auto-detect protein-ligand interactions from PDB files with RDKit, render
-close-up interaction panels, generate paired full-protein overview panels, and
-optionally match the visual style of a reference figure supplied by the user.
+`pymol-figure` is designed for students and researchers who repeatedly need
+clean protein-ligand or molecular docking figures but do not want to rewrite
+PyMOL scripts for every complex. It can auto-detect protein-ligand interactions
+from PDB files with RDKit, render close-up interaction panels, generate paired
+full-protein overview panels, and optionally match the visual style of a
+reference figure supplied by the user.
 
 <a href="docs/images/1hsg-demo.png">
   <img src="docs/images/1hsg-demo.png" alt="1HSG demo figure showing an interaction close-up and paired macro overview" width="900">
@@ -49,6 +50,14 @@ This skill has two main rendering modes:
    transparency, cartoon/surface visibility, label style, ray settings, colors,
    zoom/crop, and camera angle preferences.
 
+In short:
+
+- Use **default mode** when you want consistent, clean docking-style figures
+  without thinking about PyMOL settings.
+- Use **reference-style mode** when you already have a figure from a paper,
+  colleague, or previous project and want the new output to follow that visual
+  style as closely as possible.
+
 Macro overview views are paired to the matching interaction close-up by default:
 `macro_1` uses the same camera direction as `interaction_1`, zoomed out to the
 full protein. Interaction views default to a tighter `interaction_zoom_buffer`
@@ -82,15 +91,39 @@ Required:
 
 - PyMOL with its Python executable available.
 - A structural file (`.pdb`, `.maegz`, `.mol2`, or `.cif`).
-- RDKit for automatic interaction detection.
+- RDKit for automatic interaction detection from PDB files.
 
 Recommended:
 
 - Pillow, for high-quality Arial label compositing.
 
-RDKit is mandatory for automatic interaction detection from PDB files. On Windows,
-use a real python.org Python 3.12 when possible instead of the WindowsApps Store
-launcher. Set `PYMOL_FIGURE_RDKIT_PYTHON` to that interpreter, for example:
+### If RDKit Is Not Installed
+
+RDKit is required only for **automatic interaction detection**. If a new user
+does not have RDKit installed, the skill can still render figures when the user
+provides a manual interaction list, for example:
+
+```powershell
+D:\PyMOL\python.exe .\pymol-figure\scripts\pymol_render.py `
+  --input "complex.pdb" `
+  --interactions "A/ASP/189 hbond, A/PHE/203 pi-pi" `
+  --output ".\outputs\manual_interactions"
+```
+
+Without RDKit, the skill should not invent an interaction list from a PDB file.
+Ask the user to either install RDKit or provide the interacting residues and
+interaction types manually.
+
+### Recommended RDKit Setup
+
+On Windows, use a real python.org Python 3.12 when possible instead of the
+WindowsApps Store launcher. Install RDKit into that Python:
+
+```powershell
+py -3.12 -m pip install rdkit
+```
+
+Then set `PYMOL_FIGURE_RDKIT_PYTHON` to that interpreter, for example:
 
 ```powershell
 [Environment]::SetEnvironmentVariable(
@@ -176,9 +209,9 @@ py -3.12 .\pymol-figure\scripts\auto_detect_interactions.py complex.pdb --ligand
 If `--ligand` is omitted, the detector scores non-water, non-ion HETATM
 residues and selects the most ligand-like organic residue. Then pass the printed
 interaction spec into `pymol_render.py`. Use `--max-residues 6` or
-`--max-residues 6` or `--max-residues 8` when a crowded pocket needs fewer
-labels. Add `--include-close-contacts` only when you intentionally want gray
-close-contact dashes for hydrophobic pocket context.
+`--max-residues 8` when a crowded pocket needs fewer labels. Add
+`--include-close-contacts` only when you intentionally want gray close-contact
+dashes for hydrophobic pocket context.
 
 ## Reference-Style Mode Usage
 

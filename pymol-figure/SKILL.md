@@ -41,12 +41,25 @@ Before doing ANY work, verify the user has provided:
 1. **Structural file path** (.maegz / .pdb / .mol2 / .cif)
 2. **Interaction list**: which residues interact with the ligand, and how
 
-If the user provides a PDB file but NO interaction list, use **auto-detection mode**:
-prefer `py -3.12 SKILL_DIR/scripts/auto_detect_interactions.py <input.pdb>` to detect
-interactions automatically. RDKit is required for auto-detection; if RDKit is not
-available, stop and tell the user to run with `py -3.12` or set
-`PYMOL_FIGURE_RDKIT_PYTHON`. The script outputs a spec string compatible with
-`pymol_render.py`.
+If the user provides a PDB file but NO interaction list, use **auto-detection mode**.
+On Windows, RDKit detection MUST use the RDKit-capable Python, not PyMOL's
+Python and not Codex's bundled Python. First use `PYMOL_FIGURE_RDKIT_PYTHON`
+when it is set; otherwise use `py -3.12`:
+
+```powershell
+& $env:PYMOL_FIGURE_RDKIT_PYTHON "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
+# or
+py -3.12 "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
+```
+
+Do not decide that RDKit is unavailable only because `D:\PyMOL\python.exe`,
+plain `python`, or a Codex bundled Python cannot import RDKit. The detector can
+also re-execute itself with `PYMOL_FIGURE_RDKIT_PYTHON`, but calling the RDKit
+Python directly is the most reliable path in fresh Codex conversations. If RDKit
+is still unavailable after these commands, stop and ask the user to set
+`PYMOL_FIGURE_RDKIT_PYTHON` to a Python executable that can `import rdkit`.
+
+The script outputs a spec string compatible with `pymol_render.py`.
 
 ### Interaction Specification Format
 
@@ -83,10 +96,14 @@ Supported interaction types:
 - PyMOL is required for rendering.
 - Pillow is recommended for Arial label compositing; set `PYMOL_FIGURE_PYTHON`
   to a Python with Pillow if PyMOL's own Python does not include it.
-- RDKit is required for automatic interaction detection. `auto_detect_interactions.py`
-  first uses the current Python if RDKit is available; if not, it automatically
-  tries `PYMOL_FIGURE_RDKIT_PYTHON`, then `py -3.12`. If RDKit is still missing,
-  stop instead of using fallback detection.
+- RDKit is required for automatic interaction detection from PDB files. It is
+  not required when the user provides a manual interaction list. If RDKit is
+  missing, do not invent interactions; ask the user to install RDKit or provide
+  residues manually, then continue with `pymol_render.py`.
+- `auto_detect_interactions.py` first uses the current Python if RDKit is
+  available; if not, it automatically tries `PYMOL_FIGURE_RDKIT_PYTHON`, then
+  `py -3.12`. If RDKit is still missing, stop instead of using fallback
+  detection.
 - Auto-detection scores non-water, non-ion HETATM residues when `--ligand` is
   omitted. It reports pi interactions, salt bridges, hydrogen bonds, heavy-atom
   hydrogen-bond candidates for PDB files without hydrogens, and hydrophobic or
@@ -94,6 +111,9 @@ Supported interaction types:
   not included in the render spec unless `--include-close-contacts` is used.
   Use `--max-residues N` to reduce label crowding.
 - Run `python scripts/check_environment.py` to verify PyMOL, Pillow, and RDKit status.
+  On Windows, if `PYMOL_FIGURE_RDKIT_PYTHON` is set, use that Python for the
+  environment check so the reported RDKit status matches auto-detection:
+  `& $env:PYMOL_FIGURE_RDKIT_PYTHON scripts/check_environment.py --pymol "D:\PyMOL\python.exe"`.
 
 ---
 
@@ -375,7 +395,7 @@ cmd.png(filename, dpi=300)
 1. **Validate inputs** 鈥?file exists?
 2. **Run auto-detection**:
    ```
-   py -3.12 "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
+   & $env:PYMOL_FIGURE_RDKIT_PYTHON "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
    ```
    This outputs a spec string like
    `"B/TYR/1719 pi-pi, B/GLN/1707 hbond, B/VAL/826 contact, ..."`
