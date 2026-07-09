@@ -192,6 +192,9 @@ HYDROPHOBIC_ATOMS = {
     "ILE": ["CG2", "CD1"],
     "PRO": ["CB", "CG", "CD"],
     "MET": ["CE"],
+    "PHE": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+    "TYR": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+    "TRP": ["CG", "CD1", "CD2", "CE2", "CE3", "CZ2", "CZ3", "CH2"],
 }
 
 PROTEIN_HBOND_DONORS = {

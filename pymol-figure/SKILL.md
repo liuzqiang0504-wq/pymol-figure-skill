@@ -3,12 +3,13 @@ name: pymol-figure
 description: >-
   Automated publication-quality molecular graphics from docking/structural files
   (.maegz, .pdb, .mol2, .cif). Renders interaction close-ups and macro overview
-  figures with PyMOL, including residue labels, dashed contacts, binding-pocket
-  surfaces, reference-style profiles, and transparent-background output. Requires
-  RDKit for PDB interaction auto-detection. Use for PyMOL, docking figures,
-  protein-ligand interaction diagrams, binding-site visualization, molecular
-  rendering, publication figures, reference-style molecular graphics, 分子对接图,
-  蛋白配体作用图, 结合位点图, 作图.
+  figures with PyMOL and optional RDKit-based, LigPlot-inspired 2D interaction
+  diagrams, including residue labels, dashed contacts, binding-pocket surfaces,
+  reference-style profiles, and transparent-background output. Requires RDKit
+  for automatic interaction detection and 2D diagrams. Use for PyMOL, docking
+  figures, protein-ligand interaction diagrams, binding-site visualization,
+  molecular rendering, publication figures, reference-style molecular graphics,
+  2D作用图, 分子对接图, 蛋白配体作用图, 结合位点图, 作图.
 ---
 
 # PyMOL Figure Skill
@@ -29,10 +30,14 @@ standards.
      the structure allows.
 - **Auto mode**: When the user provides a PDB file without an interaction list, FIRST run
   `auto_detect_interactions.py` to detect interactions, THEN render
+- **Optional 2D output**: Before rendering, ask whether the user also wants a
+  2D protein-ligand interaction diagram unless the user has already accepted or
+  declined it. Do not ask again when the preference is explicit.
 - **Speed**: Use the bundled `pymol_render.py`; do NOT write a new PyMOL script
 - **Don't ask**: Color choices, transparency, ray-trace settings, label sizes, DPI
   (all are standardized below). Only ask about missing inputs.
-- **DO ask**: File path (if not provided), PyMOL path (if auto-discovery fails)
+- **DO ask**: File path (if not provided), whether optional 2D output is wanted
+  (if unspecified), and PyMOL path (if auto-discovery fails)
 
 ## Input Contract (BLOCKING GATE)
 
@@ -92,12 +97,15 @@ Supported interaction types:
 - `--dpi N`: DPI (default: 300)
 - `--ligand NAME`: ligand residue name for auto-detection (e.g. `--ligand MGP`)
 - `--style-profile JSON`: optional reference-image-derived style profile
+- 2D docking inputs: receptor `.pdb`, ligand poses `.sdf` or `.mol2`, and
+  one-based pose index (default: 1)
 
 ### Dependency Behavior
 
 - PyMOL is required for rendering.
 - Pillow is recommended for Arial label compositing; set `PYMOL_FIGURE_PYTHON`
   to a Python with Pillow if PyMOL's own Python does not include it.
+- Pillow and RDKit are both required for optional 2D interaction diagrams.
 - RDKit is required for automatic interaction detection from PDB files. It is
   not required when the user provides a manual interaction list. If RDKit is
   missing, do not invent interactions; ask the user to install RDKit or provide
@@ -166,7 +174,7 @@ script. The current renderer validates named colors against its built-in safe li
 For transparent PNG output, set `background` to `"transparent"`, `"none"`, or
 `"alpha"`.
 
-## Two Figure Types
+## 3D Figure Types
 
 ### 1. Interaction Figure
 
@@ -198,6 +206,17 @@ Full protein view showing where the ligand binds.
 | Dashed lines | **NONE** |
 | Angles | **6 paired views**: each macro image uses the same camera direction as the matching close-up, then zooms out to the full protein with `macro.paired_zoom_buffer` default 10.0 A; set `macro.paired_to_interaction=false` to use auto-selected or fixed macro angles |
 | Output | `macro_1.png` through `macro_6.png` |
+
+### Optional 2D Interaction Diagram
+
+Generate this only when the user accepts the 2D option or explicitly requests
+it. Read `references/2d-interaction-diagrams.md` before preparing inputs or
+running `scripts/generate_2d_interactions.py`. Do not install or invoke
+LigPlot+; describe the output as **LigPlot-inspired**.
+
+Preserve assigned ligand stereochemistry from SDF/MOL2 input. Render tetrahedral
+stereobonds as solid wedges and hashed wedges after generating 2D coordinates.
+Never infer or invent stereochemistry when the input leaves a center unassigned.
 
 ---
 
@@ -390,6 +409,18 @@ cmd.png(filename, dpi=300)
 
 ## Workflow
 
+### 2D Decision Gate
+
+Before starting the render, determine whether the user wants the optional 2D
+diagram:
+
+1. If the user explicitly requests or declines 2D output, follow that choice
+   without asking again.
+2. Otherwise ask one concise question: `是否同时生成2D蛋白-配体作用图？`
+3. A negative answer must not block or alter the normal 3D workflow.
+4. A positive answer requires receptor PDB plus docked ligand SDF/MOL2. Ask for
+   only the missing 2D inputs, then continue.
+
 ### Standard Mode (user provides interactions)
 
 1. **Validate inputs**: file exists? interaction list provided? If not, ask
@@ -423,6 +454,12 @@ cmd.png(filename, dpi=300)
 5. **Verify output**: check all 13 files
 6. **Report**: list detected interactions and output paths
 
+### Optional 2D Mode
+
+After the user accepts 2D output, follow
+`references/2d-interaction-diagrams.md`. Never add
+`--draw-hydrophobic-lines` unless the user explicitly requests those lines.
+
 **Important**: Always use the bundled `scripts/pymol_render.py`. Do NOT write a new PyMOL script from scratch; the bundled script has been tested and follows all IRON RULES.
 
 ---
@@ -451,7 +488,10 @@ cmd.png(filename, dpi=300)
 |------|-----------|
 | `scripts/pymol_render.py` | Main rendering engine; always used |
 | `scripts/auto_detect_interactions.py` | User provides PDB without interaction list |
+| `scripts/generate_2d_interactions.py` | User accepts optional 2D output and provides receptor PDB plus ligand SDF/MOL2 |
+| `scripts/test_2d_stereochemistry.py` | After changing the 2D renderer; verifies solid- and hashed-wedge preservation |
 | `scripts/ring_detection.py` | Ligand ring detection for pi-pi stacking |
+| `references/2d-interaction-diagrams.md` | User accepts or explicitly requests optional 2D output |
 | `references/color-standards.md` | Writing any PyMOL color/show/hide/set commands |
 | `references/interaction-types.md` | Determining ring atoms, distance cutoffs, interaction geometry |
 | `references/pymol-pitfalls.md` | Something renders wrong, color doesn't apply, or command fails silently |

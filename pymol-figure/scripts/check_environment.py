@@ -183,12 +183,14 @@ def main():
         print("              Install with: python -m pip install Pillow")
 
     rdkit_found = False
+    rdkit_cmdline = None
     rdkit_errors = []
     for cmdline in _candidate_rdkit_pythons():
         ok, error = _check_module_with_command(cmdline, "rdkit")
         if ok:
             print(f"[OK] RDKit available for higher-fidelity auto detection via: {' '.join(cmdline)}")
             rdkit_found = True
+            rdkit_cmdline = cmdline
             break
         rdkit_errors.append(f"{' '.join(cmdline)}: {error}")
     if not rdkit_found:
@@ -198,9 +200,32 @@ def main():
         print("           Automatic interaction detection requires RDKit.")
         print("           If RDKit is installed elsewhere, set PYMOL_FIGURE_RDKIT_PYTHON.")
 
+    two_d_ready = False
+    if rdkit_cmdline:
+        pillow_with_rdkit, error = _check_module_with_command(
+            rdkit_cmdline, "PIL")
+        if pillow_with_rdkit:
+            print(
+                "[OK] Optional 2D renderer ready: RDKit and Pillow share "
+                f"{' '.join(rdkit_cmdline)}")
+            two_d_ready = True
+        else:
+            print(
+                "[OPTIONAL] 2D renderer needs Pillow in the RDKit Python: "
+                f"{error}")
+            print(
+                f"           Install with: {' '.join(rdkit_cmdline)} "
+                "-m pip install Pillow")
+
     if pymol_ok and rdkit_found:
-        print("\nReady to render. For best label quality, install Pillow in one Python")
-        print("and set PYMOL_FIGURE_PYTHON to that interpreter if PyMOL lacks Pillow.")
+        print("\nReady for 3D rendering and automatic interaction detection.")
+        if two_d_ready:
+            print("Ready for optional 2D interaction diagrams.")
+        else:
+            print("Optional 2D output remains unavailable until Pillow is installed")
+            print("in the same Python environment as RDKit.")
+        print("For best 3D label quality, set PYMOL_FIGURE_PYTHON to a")
+        print("Pillow-capable interpreter if PyMOL lacks Pillow.")
     else:
         if not pymol_ok:
             print("\nEnvironment is not ready for rendering until PyMOL is available.")
