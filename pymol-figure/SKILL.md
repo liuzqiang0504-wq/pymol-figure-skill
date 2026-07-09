@@ -72,7 +72,7 @@ Examples:
 - `TYR 1719 pi-pi, ASP 189 hbond`
 - `A/PHE/1703 pi-pi, A/ASP/189 hbond` (chain-aware)
 - `ZN 301 metal` (metal coordination)
-- `PHE 1703 cation-pi, ASP 189 salt-bridge, VAL 826 contact`
+- `PHE 1703 cation-pi, ASP 189 salt-bridge`
 
 Supported interaction types:
 - `pi-pi` / `pi-stacking`: yellow dashed lines between ring centroids
@@ -80,8 +80,10 @@ Supported interaction types:
 - `metal` / `metal-coord`: purple dashed lines, metal shown as sphere (scale 0.3)
 - `cation-pi` / `cationpi`: purple dashed lines between cation and ring centroid
 - `salt-bridge` / `saltbridge`: purple dashed lines between charged groups
-- `contact` / `hydrophobic` / `close-contact`: gray dashed lines for close
-  heavy-atom pocket contacts
+- `contact` / `hydrophobic` / `close-contact`: optional gray dashed lines for
+  close heavy-atom pocket contacts. Disabled by default and rendered only when
+  the user explicitly requests them and `pymol_render.py` receives
+  `--include-close-contacts`.
 
 ### Optional Inputs
 
@@ -109,6 +111,10 @@ Supported interaction types:
   hydrogen-bond candidates for PDB files without hydrogens, and hydrophobic or
   close-contact residues. Close contacts are pocket-context candidates and are
   not included in the render spec unless `--include-close-contacts` is used.
+  Treat the printed close-contact report as context, not as the render spec.
+  Never copy reported contacts into `--interactions` during default rendering.
+  The renderer independently blocks contact entries unless it also receives
+  `--include-close-contacts`.
   Use `--max-residues N` to reduce label crowding.
 - Auto-detection must not treat protein-like HETATM residues or crystallization
   additives as the main ligand. Common modified amino acids such as MSE, SEP,
@@ -402,13 +408,18 @@ cmd.png(filename, dpi=300)
    ```
    & $env:PYMOL_FIGURE_RDKIT_PYTHON "SKILL_DIR/scripts/auto_detect_interactions.py" <input.pdb> [--ligand RESNAME]
    ```
-   This outputs a spec string like
-   `"B/TYR/1719 pi-pi, B/GLN/1707 hbond, B/VAL/826 contact, ..."`
+   Use only the final string printed under `=== Interaction spec ===`, for
+   example `"B/TYR/1719 pi-pi, B/GLN/1707 hbond"`. Do not rebuild it from the
+   earlier diagnostic report, because that report may list close contacts that
+   are intentionally excluded from default rendering.
 3. **Discover PyMOL**: find and verify PyMOL executable
 4. **Run `pymol_render.py`** with the detected interactions:
    ```
    <PYMOL_PATH> "SKILL_DIR/scripts/pymol_render.py" --input <FILE> --interactions "<DETECTED_SPEC>" --output <DIR>
    ```
+   Do not pass `--include-close-contacts` by default. When the user explicitly
+   asks to show hydrophobic or close contacts, pass the option to both
+   `auto_detect_interactions.py` and `pymol_render.py`.
 5. **Verify output**: check all 13 files
 6. **Report**: list detected interactions and output paths
 

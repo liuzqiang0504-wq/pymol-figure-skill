@@ -197,6 +197,8 @@ def parse_args():
                    help='Output directory (default: <input_dir>/pymol_figures/)')
     p.add_argument('--interactions', required=True,
                    help='Comma-separated interactions: "PHE 1703 pi-pi, ASP 189 hbond"')
+    p.add_argument('--include-close-contacts', action='store_true',
+                   help='Explicitly allow gray contact dashes (disabled by default)')
     p.add_argument('--style-profile', default=None,
                    help='Optional JSON style profile derived from a reference PyMOL image')
     return p.parse_args()
@@ -219,6 +221,20 @@ def load_style_profile(path):
     with open(path, 'r', encoding='utf-8') as handle:
         user_style = json.load(handle)
     return _merge_dict(DEFAULT_STYLE, user_style)
+
+
+def apply_close_contact_policy(interactions, include_close_contacts=False):
+    """Keep gray close contacts only after an explicit renderer opt-in."""
+    contacts = [item for item in interactions if item.get('type') == 'contact']
+    if not contacts or include_close_contacts:
+        return interactions
+
+    print(
+        f"NOTE: skipped {len(contacts)} close-contact interaction(s). "
+        "Gray contact dashes are disabled by default; add "
+        "--include-close-contacts only when the user explicitly requests them."
+    )
+    return [item for item in interactions if item.get('type') != 'contact']
 
 
 def _safe_color(name, fallback='white'):
@@ -1698,8 +1714,13 @@ def main():
 
     # Parse interactions
     interactions = parse_interactions(args.interactions)
+    interactions = apply_close_contact_policy(
+        interactions, args.include_close_contacts)
     if not interactions:
-        print("ERROR: no valid interactions specified")
+        print(
+            "ERROR: no drawable interactions remain. Close contacts require "
+            "the explicit --include-close-contacts option."
+        )
         sys.exit(1)
     print(f"Interactions: {interactions}")
 

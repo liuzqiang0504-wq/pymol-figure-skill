@@ -29,7 +29,8 @@ zoomed out to show the binding site in the full protein context.
   strengthened ligand auto-selection, heavy-atom hydrogen-bond candidates for
   PDB files without hydrogens, salt bridges, pi interactions, and hydrophobic or
   close-contact pocket residues. Close contacts are reported for context but
-  are not drawn by default unless `--include-close-contacts` is used.
+  are not drawn by default. Drawing them requires an explicit
+  `--include-close-contacts` option on both the detector and renderer.
 - Avoids treating common modified amino acids such as MSE/SEP/TPO/PTR, water,
   ions, and crystallization buffers as the main ligand during automatic ligand
   selection.
@@ -244,6 +245,9 @@ specify it explicitly with `--ligand`. Then pass the printed interaction spec
 into `pymol_render.py`. Use `--max-residues 6` or `--max-residues 8` when a
 crowded pocket needs fewer labels. Add `--include-close-contacts` only when you
 intentionally want gray close-contact dashes for hydrophobic pocket context.
+Pass that option to both `auto_detect_interactions.py` and `pymol_render.py`.
+The renderer otherwise filters out `contact` entries even if they are
+accidentally included in the interaction string.
 
 ## Reference-Style Mode Usage
 

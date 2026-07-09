@@ -187,3 +187,18 @@ cmd.set('dash_gap', 0.3, 'sb_name')
 cmd.set('dash_width', 2.5, 'sb_name')
 cmd.hide('labels', 'sb_name')
 ```
+
+## Optional Close Contacts
+
+Close contacts are pocket-context hints, not specific chemical bonds.
+
+- Detection cutoff: heavy-atom distance <= 4.0 A
+- Display: gray dashed lines
+- Default policy: report but do not render
+- Opt-in policy: render only when the user explicitly requests hydrophobic or
+  close contacts and both detector and renderer receive
+  `--include-close-contacts`
+
+Do not reconstruct the render interaction list from the detector's diagnostic
+contact report. Use the exact final string printed under
+`=== Interaction spec ===`.
