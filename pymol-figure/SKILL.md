@@ -217,6 +217,13 @@ LigPlot+; describe the output as **LigPlot-inspired**.
 Preserve assigned ligand stereochemistry from SDF/MOL2 input. Render tetrahedral
 stereobonds as solid wedges and hashed wedges after generating 2D coordinates.
 Never infer or invent stereochemistry when the input leaves a center unassigned.
+Before exporting a 2D PNG, the renderer MUST run its built-in quality gate. It
+must reject label-label, label-ligand, label-hydrophobic-symbol, and
+out-of-canvas collisions; automatically re-layout on a larger canvas before
+failing. It must also verify that every assigned R/S center retains its CIP
+assignment and has an adjacent solid/hashed wedge, while unassigned centers do
+not gain a stereobond. Report the generated `interaction_2d.json` quality check
+to the user alongside the PNG path.
 
 ---
 
