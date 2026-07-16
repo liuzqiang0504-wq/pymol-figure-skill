@@ -378,6 +378,11 @@ def _prepare_ligand(ligand):
     Chem.AssignStereochemistry(drawing_mol, cleanIt=True, force=True)
     rdDepictor.Compute2DCoords(drawing_mol, clearConfs=True)
     Chem.WedgeMolBonds(drawing_mol, drawing_mol.GetConformer())
+    stereo_report = verify_stereochemistry(ligand, drawing_mol)
+    if not stereo_report["passed"]:
+        raise ValueError(
+            "2D stereochemistry verification failed: "
+            + "; ".join(stereo_report["errors"]))
     mapping = {
         atom.GetIntProp("_source_index"): atom.GetIdx()
         for atom in drawing_mol.GetAtoms()
@@ -386,7 +391,68 @@ def _prepare_ligand(ligand):
     return drawing_mol, mapping
 
 
-def _layout_ligand(mol, width, height):
+def _chiral_centers_by_index(mol):
+    """Return RDKit's assigned/unassigned tetrahedral centres by atom index."""
+    return dict(Chem.FindMolChiralCenters(
+        mol, includeUnassigned=True, includeCIP=True))
+
+
+def verify_stereochemistry(source_mol, drawing_mol):
+    """Check that assigned input chirality survives 2D preparation visibly.
+
+    A stereocentre is considered renderable only when its R/S assignment is
+    unchanged and an adjacent bond has a solid or hashed wedge direction.  The
+    check deliberately does not require wedges for unassigned centres: drawing
+    a wedge in that case would invent stereochemical information.
+    """
+    source_centers = _chiral_centers_by_index(source_mol)
+    drawing_centers = _chiral_centers_by_index(drawing_mol)
+    source_to_drawing = {
+        atom.GetIntProp("_source_index"): atom.GetIdx()
+        for atom in drawing_mol.GetAtoms()
+        if atom.HasProp("_source_index")
+    }
+    wedge_directions = {Chem.BondDir.BEGINWEDGE, Chem.BondDir.BEGINDASH}
+    errors = []
+    assigned = {}
+    unassigned = []
+
+    for source_index, cip in source_centers.items():
+        drawing_index = source_to_drawing.get(source_index)
+        if drawing_index is None:
+            errors.append(f"chiral atom {source_index} was removed during preparation")
+            continue
+        if cip in {"R", "S"}:
+            assigned[source_index] = cip
+            if drawing_centers.get(drawing_index) != cip:
+                errors.append(
+                    f"chiral atom {source_index} changed from {cip} to "
+                    f"{drawing_centers.get(drawing_index, 'unassigned')}")
+            if not any(
+                    bond.GetBondDir() in wedge_directions
+                    for bond in drawing_mol.GetAtomWithIdx(drawing_index).GetBonds()):
+                errors.append(
+                    f"chiral atom {source_index} ({cip}) has no wedge/hash bond")
+        else:
+            unassigned.append(source_index)
+            if any(
+                    bond.GetBondDir() in wedge_directions
+                    for bond in drawing_mol.GetAtomWithIdx(drawing_index).GetBonds()):
+                errors.append(
+                    f"unassigned chiral atom {source_index} was given a wedge/hash bond")
+
+    wedge_bonds = sum(
+        bond.GetBondDir() in wedge_directions for bond in drawing_mol.GetBonds())
+    return {
+        "passed": not errors,
+        "assigned_centers": assigned,
+        "unassigned_centers": unassigned,
+        "wedge_bond_count": wedge_bonds,
+        "errors": errors,
+    }
+
+
+def _layout_ligand(mol, width, height, ligand_scale=1.0):
     coords = mol.GetConformer().GetPositions()
     min_x = min(point[0] for point in coords)
     max_x = max(point[0] for point in coords)
@@ -394,7 +460,7 @@ def _layout_ligand(mol, width, height):
     max_y = max(point[1] for point in coords)
     source_width = max(max_x - min_x, 1.0)
     source_height = max(max_y - min_y, 1.0)
-    scale = min(
+    scale = ligand_scale * min(
         width * 0.54 / source_width,
         height * 0.58 / source_height,
     )
@@ -557,14 +623,60 @@ def _boxes_overlap(first, second, padding=0):
     )
 
 
+def _box_inside_canvas(box, width, height, margin=12):
+    return (
+        box[0] >= margin and box[1] >= margin
+        and box[2] <= width - margin and box[3] <= height - margin
+    )
+
+
+def _verify_annotation_layout(
+        residue_boxes, distance_boxes, ligand_box, fan_boxes, width, height):
+    """Return a strict, machine-readable pre-export annotation QC report."""
+    errors = []
+    for index, box in enumerate(residue_boxes):
+        if not _box_inside_canvas(box, width, height):
+            errors.append(f"residue label {index} is outside the canvas")
+        if _boxes_overlap(box, ligand_box, padding=8):
+            errors.append(f"residue label {index} overlaps the ligand drawing")
+        for other_index, other in enumerate(residue_boxes[:index]):
+            if _boxes_overlap(box, other, padding=6):
+                errors.append(
+                    f"residue labels {other_index} and {index} overlap")
+        for fan_index, fan_box in enumerate(fan_boxes):
+            if _boxes_overlap(box, fan_box, padding=3):
+                errors.append(
+                    f"residue label {index} overlaps hydrophobic symbol {fan_index}")
+
+    for index, box in enumerate(distance_boxes):
+        if not _box_inside_canvas(box, width, height, margin=8):
+            errors.append(f"distance label {index} is outside the canvas")
+        if _boxes_overlap(box, ligand_box, padding=3):
+            errors.append(f"distance label {index} overlaps the ligand drawing")
+        for residue_index, residue_box in enumerate(residue_boxes):
+            if _boxes_overlap(box, residue_box, padding=3):
+                errors.append(
+                    f"distance label {index} overlaps residue label {residue_index}")
+        for other_index, other in enumerate(distance_boxes[:index]):
+            if _boxes_overlap(box, other, padding=3):
+                errors.append(
+                    f"distance labels {other_index} and {index} overlap")
+        for fan_index, fan_box in enumerate(fan_boxes):
+            if _boxes_overlap(box, fan_box, padding=3):
+                errors.append(
+                    f"distance label {index} overlaps hydrophobic symbol {fan_index}")
+    return {"passed": not errors, "errors": errors}
+
+
 def _radial_label_layout(
         draw, entries, points, center, width, height, key_font, context_font):
     atom_boxes = [
         (x - 28, y - 28, x + 28, y + 28) for x, y in points.values()
     ]
     occupied = []
-    angle_offsets = [0, 14, -14, 28, -28, 44, -44, 64, -64, 90, -90]
-    radii = [135, 170, 210, 255, 305]
+    angle_offsets = [0] + [value for step in range(12, 181, 12)
+                           for value in (step, -step)]
+    radii = [135, 170, 210, 255, 305, 360, 425, 500]
 
     def desired_angle(entry):
         dx = entry["anchor"][0] - center[0]
@@ -623,10 +735,19 @@ def _radial_label_layout(
                     25000 for atom_box in atom_boxes
                     if _boxes_overlap(box, atom_box, padding=8)
                 )
+                invalid = (
+                    boundary_penalty > 0
+                    or any(_boxes_overlap(box, other, padding=10)
+                           for other in occupied)
+                    or any(_boxes_overlap(box, atom_box, padding=8)
+                           for atom_box in atom_boxes)
+                )
                 score = (
                     boundary_penalty + overlap_penalty + ligand_penalty
                     + radius * 2 + abs(offset) * 12
                 )
+                if invalid:
+                    score += 10000000
                 if best is None or score < best[0]:
                     best = (score, x, y, box)
         entry["label_x"], entry["label_y"] = best[1], best[2]
@@ -654,8 +775,8 @@ def _place_distance_label(
     length = max(math.hypot(dx, dy), 1.0)
     nx, ny = -dy / length, dx / length
     candidates = []
-    for fraction in (0.52, 0.64, 0.40, 0.76, 0.86):
-        for normal_offset in (24, -24, 36, -36, 48, -48):
+    for fraction in (0.52, 0.64, 0.40, 0.76, 0.28, 0.86):
+        for normal_offset in (24, -24, 36, -36, 48, -48, 64, -64):
             x = start[0] + dx * fraction + nx * normal_offset
             y = start[1] + dy * fraction + ny * normal_offset
             box = draw.textbbox(
@@ -705,9 +826,10 @@ def select_groups(records, max_residues):
 
 def render_png(ligand, records, output_path, width, height,
                max_residues, opaque_background=False,
-               draw_hydrophobic_lines=False):
+               draw_hydrophobic_lines=False, _quality_attempt=0):
     drawing_mol, source_to_drawing = _prepare_ligand(ligand)
-    points = _layout_ligand(drawing_mol, width, height)
+    ligand_scale = (1.0, 0.84, 0.70)[min(_quality_attempt, 2)]
+    points = _layout_ligand(drawing_mol, width, height, ligand_scale)
     background = (
         (255, 255, 255, 255) if opaque_background
         else (255, 255, 255, 0)
@@ -803,8 +925,10 @@ def render_png(ligand, records, output_path, width, height,
             )
             entry["fan_angle"] = math.atan2(dy, dx)
             entry["fan_center"] = (
-                hydrophobic_line_end[0] + ux * 34,
-                hydrophobic_line_end[1] + uy * 34,
+                # Keep the fan clear of its own residue label as well as of
+                # neighbouring labels; the quality gate verifies this later.
+                hydrophobic_line_end[0] + ux * 64,
+                hydrophobic_line_end[1] + uy * 64,
             )
             fan_x, fan_y = entry["fan_center"]
             fan_boxes.append((
@@ -910,7 +1034,41 @@ def render_png(ligand, records, output_path, width, height,
             anchor="mm",
         )
 
+    layout_report = _verify_annotation_layout(
+        residue_label_boxes,
+        [item["box"] for item in pending_distance_labels],
+        ligand_box,
+        fan_boxes,
+        width,
+        height,
+    )
+    if not layout_report["passed"]:
+        if _quality_attempt < 2:
+            return render_png(
+                ligand, records, output_path,
+                math.ceil(width * 1.2), math.ceil(height * 1.2),
+                max_residues, opaque_background, draw_hydrophobic_lines,
+                _quality_attempt + 1,
+            )
+        raise ValueError(
+            "2D layout quality check failed after automatic relayout: "
+            + "; ".join(layout_report["errors"]))
+
+    stereo_report = verify_stereochemistry(ligand, drawing_mol)
+    if not stereo_report["passed"]:
+        raise ValueError(
+            "2D stereochemistry verification failed before export: "
+            + "; ".join(stereo_report["errors"]))
+
+    quality_report = {
+        "passed": True,
+        "layout": layout_report,
+        "stereochemistry": stereo_report,
+        "canvas": {"width": width, "height": height},
+        "layout_attempt": _quality_attempt + 1,
+    }
     image.save(output_path, dpi=(300, 300))
+    return quality_report
 
 
 def write_spec(records, path):
@@ -954,7 +1112,7 @@ def main(argv=None):
         png_path = output_dir / "interaction_2d.png"
         json_path = output_dir / "interaction_2d.json"
         spec_path = output_dir / "interaction_spec.txt"
-        render_png(
+        quality_report = render_png(
             ligand, records, png_path, args.width, args.height,
             args.max_residues, args.opaque_background,
             args.draw_hydrophobic_lines)
@@ -966,6 +1124,7 @@ def main(argv=None):
                 "transparent_background": not args.opaque_background,
                 "hydrophobic_lines": args.draw_hydrophobic_lines,
                 "interactions": records,
+                "quality_check": quality_report,
             }, indent=2),
             encoding="utf-8",
         )

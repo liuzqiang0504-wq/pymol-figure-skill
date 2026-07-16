@@ -48,6 +48,14 @@ such as `py -3.12`.
   hashed wedges, with the narrow end at the stereocenter.
 - Do not assign a wedge to an unassigned stereocenter or infer missing
   stereochemistry from the 2D layout.
+- **Pre-export quality gate (mandatory):** before the PNG is written, validate
+  that residue and distance labels do not overlap one another, the ligand
+  drawing, or hydrophobic symbols, and remain inside the canvas. If needed,
+  automatically re-layout with a larger canvas (up to two retries); fail rather
+  than exporting an unresolved collision.
+- **Pre-export stereochemistry gate (mandatory):** confirm each assigned R/S
+  centre retains its CIP assignment and is represented by an adjacent solid or
+  hashed wedge. Confirm unassigned centres were not given a stereobond.
 - Export a transparent PNG by default. Add `--opaque-background` for white.
 
 This output is LigPlot-inspired but does not invoke, redistribute, or require
@@ -67,6 +75,10 @@ lines, atoms, labels, or hydrophobic symbols. When the ligand contains assigned
 chiral centers, also verify that RDKit reports the expected CIP assignments and
 that the prepared drawing molecule contains the expected solid/hashed
 stereobonds.
+
+`interaction_2d.json` includes a `quality_check` record with the final canvas
+size, number of layout attempts, collision-check result, and stereochemistry
+verification report. Treat a missing or failed record as a failed render.
 
 After changing the 2D renderer, run:
 
