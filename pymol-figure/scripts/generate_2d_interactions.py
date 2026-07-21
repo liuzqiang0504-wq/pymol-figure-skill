@@ -56,7 +56,7 @@ def parse_args(argv=None):
     parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument(
         "--max-residues", type=int, default=0,
-        help="Optional total residue limit; 0 shows the complete pocket")
+        help="Optional limit for pocket-context-only labels; 0 shows the complete pocket. Direct interactions are never omitted.")
     parser.add_argument(
         "--pocket-cutoff", type=float, default=5.0,
         help="Show standard amino acids within this distance of the ligand "
@@ -673,10 +673,19 @@ def _radial_label_layout(
     atom_boxes = [
         (x - 28, y - 28, x + 28, y + 28) for x, y in points.values()
     ]
+    # Use the same complete ligand footprint as the export quality gate.
+    ligand_footprint = (
+        min(x for x, _ in points.values()) - 18,
+        min(y for _, y in points.values()) - 18,
+        max(x for x, _ in points.values()) + 18,
+        max(y for _, y in points.values()) + 18,
+    )
     occupied = []
     angle_offsets = [0] + [value for step in range(12, 181, 12)
                            for value in (step, -step)]
-    radii = [135, 170, 210, 255, 305, 360, 425, 500]
+    canvas_scale = max(1.0, min(width / 1600.0, height / 1100.0))
+    radii = [round(radius * canvas_scale)
+             for radius in (145, 185, 235, 295, 365, 450, 550, 670, 810)]
 
     def desired_angle(entry):
         dx = entry["anchor"][0] - center[0]
@@ -706,7 +715,7 @@ def _radial_label_layout(
         text_width = text_box[2] - text_box[0]
         text_height = text_box[3] - text_box[1]
         decoration_padding = (
-            62 if any(item["type"] == "hydrophobic"
+            110 if any(item["type"] == "hydrophobic"
                       for item in entry["items"]) else 10
         )
         best = None
@@ -731,7 +740,10 @@ def _radial_label_layout(
                     100000 for other in occupied
                     if _boxes_overlap(box, other, padding=10)
                 )
-                ligand_penalty = sum(
+                ligand_penalty = (
+                    250000 if _boxes_overlap(
+                        box, ligand_footprint, padding=8) else 0
+                ) + sum(
                     25000 for atom_box in atom_boxes
                     if _boxes_overlap(box, atom_box, padding=8)
                 )
@@ -739,6 +751,7 @@ def _radial_label_layout(
                     boundary_penalty > 0
                     or any(_boxes_overlap(box, other, padding=10)
                            for other in occupied)
+                    or _boxes_overlap(box, ligand_footprint, padding=8)
                     or any(_boxes_overlap(box, atom_box, padding=8)
                            for atom_box in atom_boxes)
                 )
@@ -807,21 +820,22 @@ def _place_distance_label(
 
 
 def select_groups(records, max_residues):
+    # Never suppress direct interaction evidence to make the figure fit.
     groups = defaultdict(list)
     for record in records:
         groups[(record["chain"], record["name"], record["number"])].append(record)
-    ranked = []
-    for key, items in sorted(
-            groups.items(),
-            key=lambda pair: (
-                min(PRIORITY[item["type"]] for item in pair[1]),
-                min(item["distance"] for item in pair[1]),
-                pair[0],
-            )):
-        ranked.append((key, items))
-        if max_residues > 0 and len(ranked) >= max_residues:
-            break
-    return ranked
+    ranked = sorted(
+        groups.items(),
+        key=lambda pair: (
+            min(PRIORITY[item["type"]] for item in pair[1]),
+            min(item["distance"] for item in pair[1]),
+            pair[0],
+        ))
+    direct = [(key, items) for key, items in ranked
+              if any(item["type"] != "pocket" for item in items)]
+    context = [(key, items) for key, items in ranked
+               if all(item["type"] == "pocket" for item in items)]
+    return direct + (context[:max_residues] if max_residues > 0 else context)
 
 
 def render_png(ligand, records, output_path, width, height,
@@ -1020,7 +1034,7 @@ def render_png(ligand, records, output_path, width, height,
             anchor="mm",
         )
 
-    for distance_label in pending_distance_labels:
+    for distance_label in []:  # distance labels hidden for complete interaction maps
         box = distance_label["box"]
         draw.rectangle(
             (box[0] - 3, box[1] - 2, box[2] + 3, box[3] + 2),
@@ -1036,17 +1050,17 @@ def render_png(ligand, records, output_path, width, height,
 
     layout_report = _verify_annotation_layout(
         residue_label_boxes,
-        [item["box"] for item in pending_distance_labels],
+        [],  # numeric distance labels are intentionally hidden
         ligand_box,
         fan_boxes,
         width,
         height,
     )
     if not layout_report["passed"]:
-        if _quality_attempt < 2:
+        if _quality_attempt < 4:
             return render_png(
                 ligand, records, output_path,
-                math.ceil(width * 1.2), math.ceil(height * 1.2),
+                math.ceil(width * 1.35), math.ceil(height * 1.35),
                 max_residues, opaque_background, draw_hydrophobic_lines,
                 _quality_attempt + 1,
             )
@@ -1107,6 +1121,14 @@ def main(argv=None):
         if not records:
             raise ValueError("RDKit detected no interactions for this pose")
 
+        selected_groups = select_groups(records, args.max_residues)
+        selected_keys = {key for key, _ in selected_groups}
+        all_keys = {(item["chain"], item["name"], item["number"]) for item in records}
+        direct_keys = {
+            key for key, items in select_groups(records, 0)
+            if any(item["type"] != "pocket" for item in items)
+        }
+        omitted_keys = sorted(all_keys - selected_keys)
         output_dir = Path(args.output)
         output_dir.mkdir(parents=True, exist_ok=True)
         png_path = output_dir / "interaction_2d.png"
@@ -1124,6 +1146,17 @@ def main(argv=None):
                 "transparent_background": not args.opaque_background,
                 "hydrophobic_lines": args.draw_hydrophobic_lines,
                 "interactions": records,
+                "coverage": {
+                    "detected_residue_count": len(all_keys),
+                    "displayed_residue_count": len(selected_keys),
+                    "omitted_residue_count": len(omitted_keys),
+                    "omitted_residues": [
+                        {"chain": key[0], "name": key[1], "number": key[2]}
+                        for key in omitted_keys
+                    ],
+                    "direct_interactions_complete": direct_keys.issubset(selected_keys),
+                    "distance_labels_shown": False,
+                },
                 "quality_check": quality_report,
             }, indent=2),
             encoding="utf-8",
